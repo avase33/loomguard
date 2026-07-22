@@ -1,0 +1,46 @@
+services:
+  api:
+    build: ./api-java
+    environment:
+      # Add "kafka" and/or "cassandra" to run against real infrastructure,
+      # e.g. SPRING_PROFILES_ACTIVE: "kafka,cassandra"
+      SPRING_PROFILES_ACTIVE: ""
+      KAFKA_BOOTSTRAP: kafka:9092
+      CASSANDRA_HOST: cassandra
+    ports:
+      - "8080:8080"
+
+  dashboard:
+    build: ./dashboard-ts
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NEXT_PUBLIC_WS_URL: ws://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  # ---- optional real infrastructure: docker compose --profile infra up ----
+
+  kafka:
+    image: bitnami/kafka:3.7
+    profiles: ["infra"]
+    environment:
+      KAFKA_CFG_NODE_ID: "0"
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "9092:9092"
+
+  cassandra:
+    image: cassandra:5.0
+    profiles: ["infra"]
+    environment:
+      CASSANDRA_CLUSTER_NAME: loomguard
+    ports:
+      - "9042:9042"

@@ -1,0 +1,80 @@
+spring:
+  application:
+    name: loomguard
+
+  # Project Loom: every request handler and @Async task runs on a virtual
+  # thread. Blocking I/O parks the virtual thread instead of pinning an OS
+  # thread, which is what lifts concurrency from hundreds to tens of thousands.
+  threads:
+    virtual:
+      enabled: true
+
+  # The default profile runs with no external services, so the Kafka and
+  # Cassandra auto-configurations are switched off unless their profile is on.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+loomguard:
+  bus:
+    capacity: 100000   # in-memory queue depth before events are dropped
+    workers: 8         # virtual threads draining the queue
+
+logging:
+  level:
+    com.loomguard: INFO
+
+---
+# Real Kafka. Start it with: docker compose --profile infra up
+spring:
+  config:
+    activate:
+      on-profile: kafka
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: loomguard-aggregator
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.loomguard.model
+
+loomguard:
+  kafka:
+    topic: loomguard.transactions
+    group: loomguard-aggregator
+
+---
+# Real Cassandra.
+spring:
+  config:
+    activate:
+      on-profile: cassandra
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+  cassandra:
+    contact-points: ${CASSANDRA_HOST:localhost}
+    port: 9042
+    local-datacenter: ${CASSANDRA_DC:datacenter1}
+    keyspace-name: loomguard
+    schema-action: create_if_not_exists
